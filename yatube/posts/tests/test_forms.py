@@ -1,10 +1,7 @@
-from django.contrib.auth import get_user_model
-from django.test import TestCase, Client
+from django.test import Client, TestCase
 from django.urls import reverse
-from ..models import Group, Post
 
-
-User = get_user_model()
+from ..models import Group, Post, User
 
 
 class PostCreateFormTests(TestCase):
@@ -15,6 +12,11 @@ class PostCreateFormTests(TestCase):
         cls.group = Group.objects.create(
             title='Тестовая группа',
             slug='test_slug',
+            description='Тестовое описание',
+        )
+        cls.group2 = Group.objects.create(
+            title='Тестовая группа 2',
+            slug='test_slug2',
             description='Тестовое описание',
         )
 
@@ -34,11 +36,11 @@ class PostCreateFormTests(TestCase):
             follow=True
         )
         self.assertRedirects(response, reverse('posts:profile',
-                             kwargs={'username': 'auth'}))
+                             kwargs={'username': self.owner.username}))
         self.assertEqual(Post.objects.count(), post_count + 1)
         self.assertTrue(
             Post.objects.filter(
-                text='Тестовый текст',
+                text=form_data['text'],
                 group=self.group
             ).exists()
         )
@@ -51,7 +53,7 @@ class PostCreateFormTests(TestCase):
         )
         post_count = Post.objects.count()
         form_data = {
-            'group': self.group.id,
+            'group': self.group2.id,
             'text': 'Тестовый текст 2',
         }
         response = self.owner_client.post(
@@ -64,7 +66,23 @@ class PostCreateFormTests(TestCase):
         self.assertEqual(Post.objects.count(), post_count)
         self.assertTrue(
             Post.objects.filter(
-                text='Тестовый текст 2',
-                group=self.group
+                text=form_data['text'],
+                group=self.group2
             ).exists()
         )
+
+    def test_unauthorized_create_post(self):
+        guest_client = Client()
+        post_count = Post.objects.count()
+        form_data = {
+            'group': self.group.id,
+            'text': 'Тестовый текст',
+        }
+        response = guest_client.post(
+            reverse('posts:post_create'),
+            data=form_data,
+            follow=True
+        )
+        self.assertRedirects(response, '/auth/login/?next='
+                             + reverse('posts:post_create'))
+        self.assertEqual(Post.objects.count(), post_count)

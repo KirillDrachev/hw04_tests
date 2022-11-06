@@ -1,25 +1,15 @@
-from django.contrib.auth import get_user_model
-from django.test import TestCase, Client
-from ..models import Group, Post
+from http import HTTPStatus
 
+from django.test import Client, TestCase
 
-User = get_user_model()
+from ..models import Group, Post, User
 
 
 class StaticURLTests(TestCase):
-    def setUp(self):
-        self.guest_client = Client()
-
-        self.owner_client = Client()
-        self.owner_client.force_login(StaticURLTests.owner)
-
-        self.authorized_client = Client()
-        self.user = User.objects.create_user(username='user')
-        self.authorized_client.force_login(self.user)
-
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
+        cls.user = User.objects.create_user(username='user')
         cls.owner = User.objects.create_user(username='auth')
         cls.group = Group.objects.create(
             title='Тестовая группа',
@@ -31,43 +21,64 @@ class StaticURLTests(TestCase):
             text='Тестовый пост 123456 abc',
         )
 
-    def test_url_exists_and_redirect(self):
-        response = self.guest_client.get('/')
-        self.assertEqual(response.status_code, 200)
-        post_pk = str(StaticURLTests.post.pk) + '/'
-        group_slug = str(StaticURLTests.group.slug) + '/'
-        user_name = str(StaticURLTests.owner.username) + '/'
-        # Test data for the whole upp
-        URL_test_data = {
-            '/': ['everyone', 'posts/index.html'],
-            '/group/' + group_slug: ['everyone', 'posts/group_list.html'],
-            '/profile/' + user_name: ['everyone', 'posts/profile.html'],
-            '/posts/' + post_pk: ['everyone', 'posts/post_detail.html'],
-            '/posts/' + post_pk + 'edit/': ['owner', 'posts/create_post.html'],
-            '/create/': ['authorized', 'posts/create_post.html'],
-        }
-        for url, data in URL_test_data.items():
-            # Does page exist?
+    def setUp(self):
+        self.guest_client = Client()
+
+        self.owner_client = Client()
+        self.owner_client.force_login(self.owner)
+
+        self.authorized_client = Client()
+        self.authorized_client.force_login(self.user)
+
+    def test_public_url_exists(self):
+        URL_test_data = [
+            '/',
+            f'/group/{self.group.slug}/',
+            f'/profile/{self.owner.username}/',
+            f'/posts/{self.post.pk}/',
+        ]
+        for url in URL_test_data:
             with self.subTest(test=url + ' exists?'):
-                response = self.owner_client.get(url)
-                self.assertEqual(response.status_code, 200)
-            # Template test
+                response = self.guest_client.get(url)
+                self.assertEqual(response.status_code, HTTPStatus.OK)
+
+    def test_guest_redirect(self):
+        URL_test_data = [
+            f'/posts/{self.post.pk}/edit/',
+            '/create/',
+        ]
+        for url in URL_test_data:
+            with self.subTest(test=url + ' not authorized redirect'):
+                response = self.guest_client.get(url, follow=True)
+                self.assertRedirects(response, '/auth/login/?next=' + url)
+
+    def test_authorized_redirect(self):
+        response = self.authorized_client.get(f'/posts/{self.post.pk}/edit/',
+                                              follow=True)
+        self.assertRedirects(response, f'/posts/{self.post.pk}/')
+
+    def test_authorized_url_exists(self):
+        response = self.authorized_client.get('/create/')
+        self.assertEqual(response.status_code, HTTPStatus.OK)
+
+    def test_owner_url_exists(self):
+        response = self.owner_client.get(f'/posts/{self.post.pk}/edit/')
+        self.assertEqual(response.status_code, HTTPStatus.OK)
+
+    def test_url_templates(self):
+        URL_test_data = {
+            '/': 'posts/index.html',
+            f'/group/{self.group.slug}/': 'posts/group_list.html',
+            f'/profile/{self.owner.username}/': 'posts/profile.html',
+            f'/posts/{self.post.pk}/': 'posts/post_detail.html',
+            f'/posts/{self.post.pk}/edit/': 'posts/create_post.html',
+            '/create/': 'posts/create_post.html',
+        }
+        for url, template in URL_test_data.items():
             with self.subTest(test=url + ' template'):
                 response = self.owner_client.get(url)
-                self.assertTemplateUsed(response, data[1])
-
-            if data[0] == 'authorized' or data[0] == 'owner':
-                # Redirect test for guest
-                with self.subTest(test=url + ' not authorized redirect'):
-                    response = self.guest_client.get(url, follow=True)
-                    self.assertRedirects(response, '/auth/login/?next=' + url)
-
-            if data[0] == 'owner':
-                # Redirect test for authorized user
-                with self.subTest(test=url + ' not owner redirect'):
-                    response = self.authorized_client.get(url, follow=True)
-                    self.assertRedirects(response, '/posts/' + post_pk)
+                self.assertTemplateUsed(response, template)
 
     def test_url_404(self):
         response = self.owner_client.get('/None/')
-        self.assertEqual(response.status_code, 404)
+        self.assertEqual(response.status_code, HTTPStatus.NOT_FOUND)

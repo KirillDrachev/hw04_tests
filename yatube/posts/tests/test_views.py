@@ -1,11 +1,8 @@
-from django.contrib.auth import get_user_model
+from django import forms
 from django.test import Client, TestCase
 from django.urls import reverse
-from django import forms
-from ..models import Group, Post
 
-
-User = get_user_model()
+from ..models import Group, Post, User
 
 
 class PostPagesTest(TestCase):
@@ -28,6 +25,13 @@ class PostPagesTest(TestCase):
             text='Тестовый пост',
             group=cls.group,
         )
+        cls.field_value = {
+            'author': cls.owner,
+            'group': cls.group,
+            'count': 1,
+            'post': cls.post,
+            'page_obj': cls.post,
+        }
 
     def setUp(self):
         self.owner_client = Client()
@@ -51,52 +55,58 @@ class PostPagesTest(TestCase):
                 response = self.owner_client.get(reverse_name)
                 self.assertTemplateUsed(response, template)
 
-    def test_pages_show_correct_context(self):
-        field_value = {
-            'author': self.owner,
-            'group': self.group,
-            'count': 1,
-            'post': self.post,
-            'page_obj': self.post,
-            'is_edit': True,
-        }
-        pages_names_context_fields = {
-            reverse('posts:index'): ['page_obj'],
-            reverse('posts:group_posts',
-                    kwargs={'slug': 'test_slug'}): ['group', 'page_obj'],
-            reverse('posts:profile',
-                    kwargs={'username': 'auth'}): ['author', 'count',
-                                                   'page_obj'],
-            reverse('posts:post_detail',
-                    kwargs={'post_id': 1}): ['count', 'post'],
-            reverse('posts:post_edit',
-                    kwargs={'post_id': 1}): ['form'],
-            reverse('posts:post_create'): ['form'],
-        }
-        for reverse_name, field_list in pages_names_context_fields.items():
-            response = self.owner_client.get(reverse_name)
-            for field in field_list:
-                with self.subTest(reverse_name=reverse_name + ' ' + field):
-                    if field == 'form':
-                        self.Test_form_correct_context(response)
-                    elif field == 'page_obj':
-                        self.Test_post_correct_context(
-                            response.context['page_obj'][0]
-                        )
-                    elif field == 'post':
-                        self.Test_post_correct_context(
-                            response.context.get('post')
-                        )
-                    else:
-                        self.assertEqual(response.context.get(field),
-                                         field_value[field])
+    def test_index_context(self):
+        response = self.owner_client.get(reverse('posts:index'))
+        self._test_post_correct_context(response.context['page_obj'][0])
 
-    def Test_post_correct_context(self, post):
+    def test_group_context(self):
+        response = self.owner_client.get(reverse('posts:group_posts',
+                                         kwargs={'slug': self.group.slug}))
+
+        self._test_post_correct_context(response.context['page_obj'][0])
+
+        self.assertEqual(response.context.get('group'),
+                         self.field_value['group'])
+
+    def test_post_context(self):
+        response = self.owner_client.get(reverse('posts:profile',
+                                         kwargs={'username': 'auth'}))
+
+        self._test_post_correct_context(response.context['page_obj'][0])
+
+        self.assertEqual(response.context.get('author'),
+                         self.field_value['author'])
+
+        self.assertEqual(response.context.get('count'),
+                         self.field_value['count'])
+
+    def test_detail_context(self):
+        response = self.owner_client.get(reverse('posts:post_detail',
+                                         kwargs={'post_id': 1}))
+
+        self._test_post_correct_context(response.context['post'])
+        self.assertEqual(response.context.get('count'),
+                         self.field_value['count'])
+
+    def test_edit_context(self):
+        response = self.owner_client.get(reverse('posts:post_edit',
+                                         kwargs={'post_id': 1}))
+
+        self._test_form_correct_context(response)
+        self.assertEqual(response.context.get('is_edit'), True)
+
+    def test_create_context(self):
+        response = self.owner_client.get(reverse('posts:post_create'))
+
+        self._test_form_correct_context(response)
+        self.assertEqual(response.context.get('is_edit'), False)
+
+    def _test_post_correct_context(self, post):
         self.assertEqual(post.text, 'Тестовый пост')
         self.assertEqual(post.author.pk, self.owner.pk)
         self.assertEqual(post.group.pk, self.group.pk)
 
-    def Test_form_correct_context(self, response):
+    def _test_form_correct_context(self, response):
         form_fields = {
             'text': forms.fields.CharField,
             'group': forms.models.ModelChoiceField
