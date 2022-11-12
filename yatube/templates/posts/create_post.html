@@ -39,7 +39,7 @@
                   {% endfor %}
               {% endif %}
 
-              <form method="post" action="{{ request.resolver_match.url }}">
+              <form method="post" action="{{ request.resolver_match.url }}" enctype="multipart/form-data">
                 {% csrf_token %}
                 
                 {% for field in form %} 

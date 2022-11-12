@@ -1,10 +1,19 @@
+import shutil
+import tempfile
+
+from django.core.files.uploadedfile import SimpleUploadedFile
+from django.conf import settings
 from django import forms
-from django.test import Client, TestCase
+from django.test import Client, TestCase, override_settings
 from django.urls import reverse
 
 from ..models import Group, Post, User
 
 
+TEMP_MEDIA_ROOT = tempfile.mkdtemp(dir=settings.BASE_DIR)
+
+
+@override_settings(MEDIA_ROOT=TEMP_MEDIA_ROOT)
 class PostPagesTest(TestCase):
     @classmethod
     def setUpClass(cls):
@@ -20,10 +29,24 @@ class PostPagesTest(TestCase):
             slug='another_test_slug',
             description='Тестовое описание',
         )
+        cls.small_gif = (
+            b'\x47\x49\x46\x38\x39\x61\x02\x00'
+            b'\x01\x00\x80\x00\x00\x00\x00\x00'
+            b'\xFF\xFF\xFF\x21\xF9\x04\x00\x00'
+            b'\x00\x00\x00\x2C\x00\x00\x00\x00'
+            b'\x02\x00\x01\x00\x00\x02\x02\x0C'
+            b'\x0A\x00\x3B'
+        )
+        uploaded = SimpleUploadedFile(
+            name='small.gif',
+            content=cls.small_gif,
+            content_type='image/gif'
+        )
         cls.post = Post.objects.create(
             author=cls.owner,
             text='Тестовый пост',
             group=cls.group,
+            image=uploaded
         )
         cls.field_value = {
             'author': cls.owner,
@@ -32,6 +55,11 @@ class PostPagesTest(TestCase):
             'post': cls.post,
             'page_obj': cls.post,
         }
+
+    @classmethod
+    def tearDownClass(cls):
+        super().tearDownClass()
+        shutil.rmtree(TEMP_MEDIA_ROOT, ignore_errors=True)
 
     def setUp(self):
         self.owner_client = Client()
@@ -105,11 +133,13 @@ class PostPagesTest(TestCase):
         self.assertEqual(post.text, 'Тестовый пост')
         self.assertEqual(post.author.pk, self.owner.pk)
         self.assertEqual(post.group.pk, self.group.pk)
+        self.assertEqual(post.image, 'posts/small.gif')
 
     def _test_form_correct_context(self, response):
         form_fields = {
             'text': forms.fields.CharField,
-            'group': forms.models.ModelChoiceField
+            'group': forms.models.ModelChoiceField,
+            'image': forms.fields.ImageField
         }
         for value, expected in form_fields.items():
             form_field = response.context.get('form').fields.get(value)

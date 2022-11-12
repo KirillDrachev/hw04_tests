@@ -46,6 +46,7 @@ class StaticURLTests(TestCase):
         URL_test_data = [
             f'/posts/{self.post.pk}/edit/',
             '/create/',
+            f'/posts/{self.post.pk}/comment/',
         ]
         for url in URL_test_data:
             with self.subTest(test=url + ' not authorized redirect'):
