@@ -3,7 +3,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse_lazy
 
 from .forms import PostForm, CommentForm
-from .models import Group, Post, User
+from .models import Group, Post, Follow, User
 from .utils import by_page
 
 
@@ -39,6 +39,8 @@ def profile(request, username):
         'author': author,
         'count': count,
         'page_obj': page_obj,
+        'following': (request.user.is_authenticated
+                      and author.following.filter(user=request.user).exists()),
     }
     return render(request, template, context)
 
@@ -103,3 +105,31 @@ def add_comment(request, post_id):
         comment.post = post
         comment.save()
     return redirect('posts:post_detail', post_id=post_id)
+
+
+@login_required
+def follow_index(request):
+    template = 'posts/follow.html'
+    post_list = Post.objects.posts = Post.objects.select_related(
+        'author', 'group'
+    ).filter(author__following__user=request.user)
+    page_obj = by_page(request, post_list)
+    context = {
+        'page_obj': page_obj,
+    }
+    return render(request, template, context)
+
+
+@login_required
+def profile_follow(request, username):
+    author = get_object_or_404(User, username=username)
+    if author != request.user:
+        Follow.objects.create(user=request.user, author=author)
+    return redirect('posts:profile', username=username)
+
+
+@login_required
+def profile_unfollow(request, username):
+    author = get_object_or_404(User, username=username)
+    Follow.objects.filter(author=author, user=request.user).delete()
+    return redirect('posts:profile', username=username)

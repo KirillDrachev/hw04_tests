@@ -5,12 +5,16 @@
 {% endblock %}
 
 {% block content %}
-  <h1>Последние обновления на сайте</h1>
-  {% for post in page_obj %}
-    <article>
-      {% include 'includes/post.html'%}
-    </article>
-    {% if not forloop.last %}<hr>{% endif %}
-  {% endfor %}
-  {% include 'posts/includes/paginator.html' %}
+  {% load cache %}
+  {% cache 20 index_page page_obj.number %}
+    {% include 'posts/includes/switcher.html' %}
+    <h1>Последние обновления на сайте</h1>
+    {% for post in page_obj %}
+      <article>
+        {% include 'includes/post.html'%}
+      </article>
+      {% if not forloop.last %}<hr>{% endif %}
+    {% endfor %}
+    {% include 'posts/includes/paginator.html' %}
+  {% endcache %}
 {% endblock %}
