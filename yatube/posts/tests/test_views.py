@@ -7,7 +7,7 @@ from django import forms
 from django.test import Client, TestCase, override_settings
 from django.urls import reverse
 
-from ..models import Group, Post, User
+from ..models import Group, Post, Follow, User
 
 
 TEMP_MEDIA_ROOT = tempfile.mkdtemp(dir=settings.BASE_DIR)
@@ -188,3 +188,38 @@ class PostPaginatorTest(TestCase):
             with self.subTest(page_name=page + '?page=2'):
                 response = self.owner_client.get(page + '?page=2')
                 self.assertEqual(len(response.context['page_obj']), 3)
+
+
+class FollowTest(TestCase):
+
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        cls.user = User.objects.create_user(username='user')
+
+    def setUp(self):
+        self.authorized_client = Client()
+        self.authorized_client.force_login(self.user)
+
+    def test_follow_user(self):
+        Follow.objects.all().delete()
+        self.authorized_client.get(
+            reverse('posts:profile_follow', args=[self.author]),
+            follow=True
+        )
+        self.assertTrue(
+            Follow.objects.filter(author=self.author, user=self.user).exists()
+        )
+
+    def test_unfollow_user(self):
+        Follow.objects.all().delete()
+        Follow.objects.create(
+            user=self.user, author=self.author
+        )
+        self.authorized_client.get(reverse(
+            'posts:profile_unfollow', args=[self.author]),
+            follow=True)
+        self.assertFalse(
+            Follow.objects.filter(
+                author=self.author, user=self.user).exists()
+        )
