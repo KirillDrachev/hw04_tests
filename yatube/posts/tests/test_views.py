@@ -1,14 +1,14 @@
 import shutil
 import tempfile
 
-from django.core.files.uploadedfile import SimpleUploadedFile
-from django.conf import settings
 from django import forms
+from django.conf import settings
+from django.core.cache import cache
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import Client, TestCase, override_settings
 from django.urls import reverse
 
-from ..models import Group, Post, Follow, User
-
+from ..models import Follow, Group, Post, User
 
 TEMP_MEDIA_ROOT = tempfile.mkdtemp(dir=settings.BASE_DIR)
 
@@ -196,6 +196,11 @@ class FollowTest(TestCase):
     def setUpClass(cls):
         super().setUpClass()
         cls.user = User.objects.create_user(username='user')
+        cls.author = User.objects.create_user(username='auth')
+        cls.post = Post.objects.create(
+            author=cls.author,
+            text='Тестовый пост',
+        )
 
     def setUp(self):
         self.authorized_client = Client()
@@ -223,3 +228,53 @@ class FollowTest(TestCase):
             Follow.objects.filter(
                 author=self.author, user=self.user).exists()
         )
+
+    def test_new_post_for_follower(self):
+        Follow.objects.all().delete()
+        Follow.objects.create(
+            user=self.user, author=self.author
+        )
+        response = self.authorized_client.get(
+            reverse('posts:follow_index')
+        )
+        self.assertIn(self.post, response.context['page_obj'])
+
+        Follow.objects.all().delete()
+        response_after_unfollowing = self.authorized_client.get(
+            reverse('posts:follow_index')
+        )
+        self.assertNotIn(
+            self.post, response_after_unfollowing.context['page_obj']
+        )
+
+
+class CacheTest(TestCase):
+
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        cls.author = User.objects.create_user(username='auth')
+        cls.post = Post.objects.create(
+            author=cls.author,
+            text='Тестовый пост',
+        )
+
+    def setUp(self):
+        self.authorized_client = Client()
+        self.authorized_client.force_login(self.author)
+
+    def test_cache(self):
+        response = self.authorized_client.get(
+            reverse('posts:index')
+        )
+        posts = response.content
+        Post.objects.all().delete()
+        response = self.authorized_client.get(
+            reverse('posts:index')
+        )
+        self.assertEqual(posts, response.content)
+        cache.clear()
+        response = self.authorized_client.get(
+            reverse('posts:index')
+        )
+        self.assertNotEqual(posts, response.content)

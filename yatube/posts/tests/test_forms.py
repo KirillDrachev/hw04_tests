@@ -1,13 +1,12 @@
 import shutil
 import tempfile
 
-from django.core.files.uploadedfile import SimpleUploadedFile
 from django.conf import settings
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import Client, TestCase, override_settings
 from django.urls import reverse
 
-from ..models import Group, Post, Comment, User
-
+from ..models import Comment, Group, Post, User
 
 TEMP_MEDIA_ROOT = tempfile.mkdtemp(dir=settings.BASE_DIR)
 

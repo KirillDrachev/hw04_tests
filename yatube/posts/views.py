@@ -2,8 +2,8 @@ from django.contrib.auth.decorators import login_required
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse_lazy
 
-from .forms import PostForm, CommentForm
-from .models import Group, Post, Follow, User
+from .forms import CommentForm, PostForm
+from .models import Follow, Group, Post, User
 from .utils import by_page
 
 
